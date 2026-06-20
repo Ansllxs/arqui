@@ -1,0 +1,109 @@
+; Programa para verificar que la suma de los cubos de los primeros n enteros
+; es igual a la suma al cuadrado de los primeros n enteros
+
+includelib \Windows\System32\kernel32.dll
+
+ExitProcess proto
+
+.data
+    limit        equ 5
+	n            dw 1
+	SumaCubos    dd 2
+	CuadradoSuma dd 3
+
+.code
+main PROC
+;    R8d : acumulador de los cubos
+;    R9d : resultado de la formula del cuadrado de la suma
+
+; "Solicitar" limite de la suma de cubos
+   sub  RSP, 8                 ; Se hace campo en la pila para el valor de la función
+   call getSumLimit
+   pop  RCX                    ; Se recupera el valor retornado en ECX y se actualiza "n"
+   mov  n, CX                  ;
+
+; Calcular suma de los cubos hasta n
+   xor  R8,R8
+   call sumCubes               ; El parámetro "n" se pasará en el registro CX, no en la pila.
+                               ; Asimismo, el valor de la función se regresará en R8w.
+
+; Calcular fórmula del cuadrado de la suma simple hasta n
+   xor  R9,R9
+   call formulaCuadradoSuma    ; El parámetro "n" se pasará en el registro CX, no en la pila.
+                               ; Asimismo, el valor de la función se regresará en R9w.
+
+
+   cmp R8,R9                   ; IF los resultados son iguales
+   jne elseComparar            ;
+   ; then
+       call anunciarIgualdad   ;  then anunciar: son iguales
+	   jmp  endIfResultadosIguales
+   elseComparar:
+       call anunciarDesigualdad ;  else anunciar: son diferentes
+   endIfResultadosIguales:
+       call ExitProcess
+
+main ENDP
+
+getSumLimit PROC ; Input del valor del límite de la suma
+   mov RBP,RSP
+; StackFrame:
+;     RSP  : Return Address
+;     RSP+8: Returned Value
+
+   mov dword PTR [RSP+8],limit
+   ret
+getSumLimit ENDP
+
+sumCubes PROC ; Suma de los primeros n cubos
+              ; Variables locales
+              ; i : índice del ciclo
+              ; s : acumulador de la suma
+
+   mov RBP,RSP  ; Se salva la dirección de la dirección de retorno
+
+                ; Stack Frame recibido:
+                ; RBP    : Direccion de retorno
+                ; RBP + 8: Espacio para el valor de retorno
+
+   sub RSP,8   ; Se crean las variables "i" y "s"
+                ; &i : RSP
+                ; &s : RSP + 4
+   mov dword PTR [RSP],0   ;se inicializa el índice: i <- 0
+   mov dword PTR [RSP+4],0 ;se inicializa el acumulador de la suma: s <- 0
+                          ;el ciclo termina cuando i = n
+   cicloSumaCubos:
+                          ;Se calcula i**3
+      xor EAX,EAX
+      xor EDX,EDX
+      inc dword PTR [RSP]   ; i <- i+1
+      mov EBX,[RSP]
+      mov EAX,EBX
+      mul EBX
+      mul EBX
+                          ;Se agrega a la suma
+      add [RSP+4],EAX
+                          ;Se verifica si i = n
+      cmp [RSP],ECX
+      jne cicloSumaCubos
+   xor R8,R8              ;Se deja el valor de retorno en R8
+   mov R8d,[RSP+4]        ;
+
+   mov RSP,RBP            ;Se eliminan las variables locales
+   ret
+sumCubes ENDP
+
+formulaCuadradoSuma PROC ; Evaluacion de la fórmula del cuadrado de la
+                         ; suma de los primeros n enteros
+   ret
+formulaCuadradoSuma ENDP
+
+anunciarIgualdad PROC
+   ret
+anunciarIgualdad ENDP
+
+anunciarDesigualdad PROC
+   ret
+anunciarDesigualdad ENDP
+
+END

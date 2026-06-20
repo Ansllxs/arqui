@@ -1,2 +1,2 @@
-# arqui
-Repo para el curso de Arquitectura de Computadores
+# Proyectos I y II - Arquitectura de Computadores
+Repo para los proyectos del curso de Arquitectura de Computadores
