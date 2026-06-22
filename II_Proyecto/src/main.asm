@@ -23,6 +23,8 @@ option casemap:none
 PUBLIC main
 
 includelib msvcrt.lib
+; En Visual Studio moderno, printf/scanf pueden requerir esta librería auxiliar.
+includelib legacy_stdio_definitions.lib
 
 printf PROTO C :PTR BYTE, :VARARG
 scanf  PROTO C :PTR BYTE, :VARARG
