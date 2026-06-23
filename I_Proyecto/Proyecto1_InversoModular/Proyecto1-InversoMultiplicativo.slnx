@@ -1,0 +1,7 @@
+<Solution>
+  <Configurations>
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Project Path="InversoModularMASM.vcxproj" Id="ab06ff80-25e6-4481-876e-ef8f210a6835" />
+</Solution>
