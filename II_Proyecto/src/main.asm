@@ -6,16 +6,6 @@
 ;   d(A,B) = ||A - B||_F = sqrt( sum_i sum_j |a_ij - b_ij|^2 )
 ; donde las matrices serán dadas por el usuario a través de la consola.
 ;
-; Puntos importantes de implementación:
-;   - Se usa precisión doble: REAL8 / double / 64 bits.
-;   - Se trabaja con registros YMM de 256 bits.
-;   - Cada YMM puede contener 4 doubles de 64 bits.
-;   - Como cada fila real tiene solo 3 elementos, se agrega un cuarto
-;     elemento de padding con valor 0.0.
-;   - La diferencia A - B se calcula con vsubpd, una instrucción AVX
-;     empacada para doubles.
-;   - El valor absoluto se calcula con vandpd, apagando el bit de signo
-;     mediante una máscara.
 ;
 ; Integrantes del proyecto:
 ; - Julio Quirós Vargas
@@ -28,10 +18,9 @@ option casemap:none
 
 PUBLIC main
 
-; Se usa la biblioteca de C para entrada/salida en consola.
+; Biblioteca de C para entrada/salida en consola.
 ; printf permite mostrar texto y scanf permite leer doubles con %lf.
 includelib msvcrt.lib
-; En Visual Studio moderno, printf/scanf pueden requerir esta librería auxiliar.
 includelib legacy_stdio_definitions.lib
 
 printf PROTO C :PTR BYTE, :VARARG
@@ -53,8 +42,7 @@ scanf  PROTO C :PTR BYTE, :VARARG
     ; ------------------------------------------------------------
     ; Matrices y variables numéricas
     ; ------------------------------------------------------------
-    ; Se usan movimientos no alineados vmovupd, por eso no se exige ALIGN 32.
-    ; Cada fila ocupa 4 REAL8 = 32 bytes: 3 valores reales + 1 cero de padding.
+    ; Cada fila ocupa 32 bytes: 3 valores reales + 1 cero de padding.
     ;
     ; Distribución de una matriz:
     ;   Fila 1: posiciones 0, 1, 2, padding
@@ -70,8 +58,8 @@ scanf  PROTO C :PTR BYTE, :VARARG
     TempSums  REAL8 4 DUP(0.0)       ; sumas parciales por lane del acumulador YMM
     Resultado REAL8 0.0
 
-    ; Máscara para valor absoluto en double IEEE 754.
-    ; En un double, el bit más significativo es el signo.
+    ; Máscara para valor absoluto en double.
+    ; En el double, el bit más significativo es el signo.
     ; 0x7FFFFFFFFFFFFFFF deja todos los bits iguales excepto el signo, que se apaga.
     ; Al aplicar vandpd con esta máscara:
     ;   abs(x) = x AND 0x7FFFFFFFFFFFFFFF
@@ -80,9 +68,8 @@ scanf  PROTO C :PTR BYTE, :VARARG
 .code
 main PROC
     ; ------------------------------------------------------------
-    ; Prólogo mínimo de main
+    ; Push de registros a la pila
     ; ------------------------------------------------------------
-    ; Se preservan registros no volátiles usados como contadores/bases.
     ; RBX y RDI se usan como registros base para direccionar matrices.
     ; R12 y R13 se usan como contadores de fila y columna.
     push rbx
@@ -90,7 +77,6 @@ main PROC
     push r12
     push r13
 
-    ; Shadow space + alineación para llamadas del ABI Windows x64.
     ; Las llamadas a printf/scanf usan RCX, RDX, R8 y R9 como primeros argumentos.
     sub rsp, 40
 
@@ -143,7 +129,7 @@ leerA_columna:
     ; ============================================================
     ; PARTE 2 - Lectura de matriz B
     ; ============================================================
-    ; Es el mismo procedimiento usado para A, pero guardando en MatrizB.
+    ; Mismo procedimiento usado para A, pero guardando en MatrizB.
     lea rcx, tituloB
     call printf
 
@@ -181,14 +167,14 @@ leerB_columna:
     ; ============================================================
     ; PARTE 3 - Cálculo de distancia de Frobenius
     ; ============================================================
-    ; Se procesa una fila por vez. Cada fila ocupa 4 doubles = 32 bytes.
+    ; Se procesa una fila por vez. 
     ; Para cada fila:
-    ;   1) Cargar fila de A en YMM0.
-    ;   2) Cargar fila de B en YMM1.
-    ;   3) Calcular D = A - B con vsubpd.
-    ;   4) Obtener abs(D) con vandpd y AbsMask.
-    ;   5) Elevar al cuadrado con vmulpd.
-    ;   6) Acumular sumas parciales con vaddpd.
+    ;   1- Cargar fila de A en YMM0.
+    ;   2- Cargar fila de B en YMM1.
+    ;   3- Calcular D = A - B con vsubpd.
+    ;   4- Obtener abs(D) con vandpd y AbsMask.
+    ;   5- Elevar al cuadrado con vmulpd.
+    ;   6- Acumular sumas parciales con vaddpd.
     ;
     ; YMM6 será el acumulador vectorial:
     ;   ymm6[0] acumula los cuadrados de la primera columna.
@@ -212,7 +198,7 @@ leerB_columna:
     ; ------------------------------------------------------------
     ; Procesar fila 2
     ; ------------------------------------------------------------
-    ; +32 bytes porque cada fila interna ocupa 4 REAL8 = 32 bytes.
+    ; +32 bytes porque cada fila interna ocupa 32 bytes.
     vmovupd ymm0, ymmword ptr [MatrizA + 32]
     vmovupd ymm1, ymmword ptr [MatrizB + 32]
     vsubpd  ymm2, ymm0, ymm1
@@ -240,7 +226,7 @@ leerB_columna:
     ; ============================================================
     ; Al terminar las tres filas, YMM6 contiene cuatro sumas parciales.
     ; Se guardan en TempSums y luego se suman de forma escalar para obtener:
-    ;   sumaTotal = sum_i sum_j |a_ij - b_ij|^2
+    ;   sumaTotal = sum_i sum_j (a_ij - b_ij)^2
     ; Finalmente se calcula sqrt(sumaTotal).
     vmovupd ymmword ptr [TempSums], ymm6
     vmovsd xmm0, real8 ptr [TempSums]
@@ -268,8 +254,6 @@ mostrar_fila:
     lea rdi, MatrizD
 
     ; printf(fmtFila, D[fila][0], D[fila][1], D[fila][2])
-    ; Para llamadas variádicas en este ensamblador/proyecto, se pasan los bits
-    ; de cada double en RDX/R8/R9 con movq desde registros XMM auxiliares.
     lea rcx, fmtFila
     movsd xmm1, real8 ptr [rdi + rax]
     movsd xmm2, real8 ptr [rdi + rax + 8]
@@ -293,10 +277,9 @@ mostrar_fila:
     call printf
 
     ; Limpia la parte alta de los registros YMM antes de retornar.
-    ; Es una buena práctica al mezclar AVX con bibliotecas externas.
     vzeroupper
 
-    ; Restaurar pila y registros no volátiles.
+    ; Restaurar pila y registros.
     add rsp, 40
     pop r13
     pop r12
